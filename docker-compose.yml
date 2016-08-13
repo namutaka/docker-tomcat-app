@@ -1,0 +1,10 @@
+# compose
+version: '2'
+
+services:
+  web:
+    image: myapp
+    # 必要ならポートを固定
+    ports:
+      - "8081:8080"
+      - "8009:8009"

@@ -1,0 +1,17 @@
+# compose
+version: '2'
+
+services:
+  web:
+    build: .
+    volumes:
+      - ./target/lib:/app/target/lib:ro
+      - ./target/classes:/app/target/classes:ro
+      - ./src/main/webapp:/app/src/main/webapp:ro
+      - ./springloaded-1.2.5.RELEASE.jar:/app/springloaded-1.2.5.RELEASE.jar:ro
+    environment:
+      JAVA_OPTS: -javaagent:springloaded-1.2.5.RELEASE.jar -noverify
+    # 必要ならポートを固定
+    ports:
+      - "8081:8080"
+      - "8009:8009"
