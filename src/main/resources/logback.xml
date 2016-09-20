@@ -11,6 +11,7 @@
 
     <logger name="org.apache.catalina" level="WARN" />
     <logger name="org.apache.tomcat" level="WARN" />
+    <logger name="org.apache.jasper" level="WARN" />
 
     <root level="DEBUG">
         <appender-ref ref="STDOUT" />
