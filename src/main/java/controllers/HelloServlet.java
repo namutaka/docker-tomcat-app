@@ -37,9 +37,6 @@ public class HelloServlet extends HttpServlet {
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        log.info(Collections.list(req.getHeaderNames()).toString());
-        log.info(Collections.list(req.getHeaderNames()).toString());
-
         StringBuilder body = new StringBuilder();
         body.append("hello world ");
         body.append(",");
