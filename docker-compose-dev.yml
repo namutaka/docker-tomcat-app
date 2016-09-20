@@ -10,7 +10,11 @@ services:
       - ./src/main/webapp:/app/src/main/webapp:ro
       - ./springloaded-1.2.5.RELEASE.jar:/app/springloaded-1.2.5.RELEASE.jar:ro
     environment:
-      JAVA_OPTS: -javaagent:springloaded-1.2.5.RELEASE.jar -noverify
+      JAVA_OPTS: >
+        -javaagent:springloaded-1.2.5.RELEASE.jar -noverify
+        -Dhttp.prop.connectionTimeout=2000
+        -Dhttp.prop.acceptCount=20
+        -Dajp.prop.connectionTimeout=2000
     # 必要ならポートを固定
     ports:
       - "8081:8080"

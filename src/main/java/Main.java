@@ -8,6 +8,8 @@ import org.apache.catalina.webresources.StandardRoot;
 import org.apache.coyote.AbstractProtocol;
 import org.apache.coyote.ProtocolHandler;
 import org.apache.tomcat.util.scan.StandardJarScanner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 
 import javax.servlet.ServletException;
@@ -17,6 +19,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 public class Main {
+    private static Logger logger = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) throws Exception {
         SLF4JBridgeHandler.removeHandlersForRootLogger();
@@ -24,44 +27,77 @@ public class Main {
 
         final Tomcat tomcat = new Tomcat();
 
-        //The port that we should run on can be set into an environment variable
-        //Look for that variable and default to 8080 if it isn't there.
-        String webPort = System.getenv("PORT");
-        if(webPort == null || webPort.isEmpty()) {
-            webPort = "8080";
-        }
-        int port = Integer.valueOf(webPort);
-
+        int port = 8080;
         tomcat.setPort(port);
+
+        //
+        // Http Connector
+        //
 
         // https://tomcat.apache.org/tomcat-8.0-doc/config/http.html
         // <Connector port="8080" protocol="HTTP/1.1" connectionTimeout="20000" />
-        addConnector(tomcat, getConnector(
+        Connector httpConnector = getConnector(
                 "HTTP/1.1",
                 port,
-                20000,
                 "UTF-8",
                 true,
-                true,
-                200));
+                Integer.parseInt(System.getProperty("http.maxThread", "200")));
 
-        // enableSSL(connector, enableClientAuth);
-        // setProxy(connector, proxyBaseUrl);
-        // enableCompression(connector, compressableMimeTypes);
+        // Set attributes (https://tomcat.apache.org/tomcat-8.0-doc/config/http.html)
+        // Example:
+        //   http.prop.connectionTimeout = 2000
+        //   http.prop.bindOnInit = false
+        setPropertiesFromSystem(httpConnector, "http.prop.");
+
+        if ("true".equalsIgnoreCase(System.getProperty("http.enableSSL"))) {
+            enableSSL(httpConnector, true);
+        }
+
+        String httpProxyUrl = System.getProperty("http.proxyUrl");
+        if (httpProxyUrl != null && !httpProxyUrl.isEmpty()) {
+            setProxy(httpConnector, httpProxyUrl);
+        }
+
+        if ("true".equalsIgnoreCase(System.getProperty("http.compression"))) {
+            String httpCompressableMimeTypes = System.getProperty("http.compressableMimeTypes");
+            enableCompression(httpConnector, httpCompressableMimeTypes);
+        }
+
+        addConnector(tomcat, httpConnector);
+
+        //
+        // Ajp Connector
+        //
 
         // https://tomcat.apache.org/tomcat-8.0-doc/config/ajp.html
         // <Connector port="8009" protocol="AJP/1.3" redirectPort="8443" />
-        addConnector(tomcat, getConnector(
+        Connector ajpConnector = getConnector(
                 "AJP/1.3",
                 8009,
-                20000,
                 "UTF-8",
                 true,
-                true,
-                200));
+                Integer.parseInt(System.getProperty("ajp.maxThread", "200")));
+
+        // https://tomcat.apache.org/tomcat-8.0-doc/config/ajp.html
+        setPropertiesFromSystem(ajpConnector, "ajp.prop.");
+
+        String ajpProxyUrl = System.getProperty("ajp.proxyUrl");
+        if (ajpProxyUrl != null && !ajpProxyUrl.isEmpty()) {
+            setProxy(ajpConnector, ajpProxyUrl);
+        }
+
+        addConnector(tomcat, ajpConnector);
+
+        //
+        // Context
+        //
 
         Context ctx = addWebappContext(tomcat, "/", "target/classes", "src/main/webapp/");
         setupContext(ctx, true, tomcat.getServer(), false, null, null, 30 /* mins */);
+
+        //
+        // Start
+        //
 
         addShutdownHook(tomcat);
         tomcat.start();
@@ -71,32 +107,24 @@ public class Main {
     private static Connector getConnector(
             String protocol,
             int port,
-            int connectionTimeout,
             String uriEncoding,
             boolean useBodyEncodingForURI,
-            boolean bindOnInit,
             int maxThreads) throws URISyntaxException {
 
         final Connector connector = new Connector(protocol);
         connector.setPort(port);
-
-        connector.setProperty("connectionTimeout", String.valueOf(connectionTimeout));
 
         if (null != uriEncoding) {
             connector.setURIEncoding(uriEncoding);
         }
         connector.setUseBodyEncodingForURI(useBodyEncodingForURI);
 
-        if (!bindOnInit) {
-            connector.setProperty("bindOnInit", "false");
-        }
-
         if (maxThreads > 0) {
             ProtocolHandler handler = connector.getProtocolHandler();
             if (handler instanceof AbstractProtocol) {
                 ((AbstractProtocol) handler).setMaxThreads(maxThreads);
             } else {
-                System.out.println("WARNING: Could not set maxThreads!");
+                logger.warn("WARNING: Could not set maxThreads!");
             }
         }
 
@@ -114,7 +142,7 @@ public class Main {
             connector.setProperty("sslProtocol", "tls");
             File truststoreFile = new File(pathToTrustStore);
             connector.setAttribute("truststoreFile", truststoreFile.getAbsolutePath());
-            System.out.println(truststoreFile.getAbsolutePath());
+            logger.info(truststoreFile.getAbsolutePath());
             connector.setAttribute("trustStorePassword", System.getProperty("javax.net.ssl.trustStorePassword"));
         }
 
@@ -122,7 +150,7 @@ public class Main {
         if (pathToKeystore != null) {
             File keystoreFile = new File(pathToKeystore);
             connector.setAttribute("keystoreFile", keystoreFile.getAbsolutePath());
-            System.out.println(keystoreFile.getAbsolutePath());
+            logger.info(keystoreFile.getAbsolutePath());
             connector.setAttribute("keystorePass", System.getProperty("javax.net.ssl.keyStorePassword"));
         }
 
@@ -157,10 +185,21 @@ public class Main {
         connector.setProperty("compressableMimeType", compressableMimeTypes);
     }
 
+    private static void setPropertiesFromSystem(Connector connector, String propKeyPrefix) {
+        for (String key : System.getProperties().stringPropertyNames()) {
+            if (key.startsWith(propKeyPrefix)) {
+                String propKey = key.substring(propKeyPrefix.length());
+                String propValue = System.getProperty(key);
+                logger.info("{} set property {}={}", connector, propKey, propValue);
+                connector.setProperty(propKey, propValue);
+            }
+        }
+    }
+
     private static void addConnector(Tomcat tomcat, Connector connector) {
         final Service service = tomcat.getService();
 
-        // １つ目のConnectorはtomcatのメインとして設定
+        // set first connector for main
         if (service.findConnectors().length == 0) {
             tomcat.setConnector(connector);
         }
@@ -178,7 +217,7 @@ public class Main {
             public void run() {
                 try {
                     if (tomcat != null) {
-                        System.out.println("Stop tomcat server");
+                        logger.info("Stop tomcat server");
                         tomcat.getServer().stop();
                     }
                 } catch (LifecycleException exception) {
@@ -192,7 +231,7 @@ public class Main {
                                             final String contextPath,
                                             final String classesPath,
                                             final String webappPath) throws ServletException {
-        System.out.println("configuring app with basedir: "
+        logger.info("configuring app with basedir: "
                 + new File(webappPath).getAbsolutePath());
 
         StandardContext ctx = (StandardContext) tomcat.addWebapp(
@@ -238,7 +277,7 @@ public class Main {
 
         // set the context xml location if there is only one war
         if (contextXml != null) {
-            System.out.println("Using context config: " + contextXml);
+            logger.info("Using context config: " + contextXml);
             ctx.setConfigFile(new File(contextXml).toURI().toURL());
         }
 
