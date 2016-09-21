@@ -26,7 +26,6 @@ public class HelloServlet extends HttpServlet {
         prop = new Properties();
         try {
             InputStream is = HelloServlet.class.getResourceAsStream("/config.properties");
-            System.out.printf(is.toString());
             prop.load(is);
         } catch (IOException e) {
             e.printStackTrace();
@@ -36,6 +35,7 @@ public class HelloServlet extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
+        log.info("Access: {}, params={}", req.getRequestURL(), req.getParameterMap());
 
         StringBuilder body = new StringBuilder();
         body.append("hello world ");
@@ -44,6 +44,9 @@ public class HelloServlet extends HttpServlet {
         body.append(",");
         body.append("prop key1=");
         body.append(prop.getProperty("KEY1"));
+        body.append(",");
+        body.append("params=");
+        body.append(req.getParameterMap());
 
         ServletOutputStream out = resp.getOutputStream();
         out.write(body.toString().getBytes());
