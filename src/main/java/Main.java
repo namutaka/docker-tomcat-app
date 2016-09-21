@@ -7,6 +7,7 @@ import org.apache.catalina.webresources.DirResourceSet;
 import org.apache.catalina.webresources.StandardRoot;
 import org.apache.coyote.AbstractProtocol;
 import org.apache.coyote.ProtocolHandler;
+import org.apache.tomcat.util.IntrospectionUtils;
 import org.apache.tomcat.util.scan.StandardJarScanner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -190,8 +191,11 @@ public class Main {
             if (key.startsWith(propKeyPrefix)) {
                 String propKey = key.substring(propKeyPrefix.length());
                 String propValue = System.getProperty(key);
-                logger.info("{} set property {}={}", connector, propKey, propValue);
-                connector.setProperty(propKey, propValue);
+                if (IntrospectionUtils.setProperty(connector, propKey, propValue)) {
+                    logger.info("{} set property {}={}", connector, propKey, propValue);
+                } else {
+                    logger.warn("{} did not set property {}={}", connector, propKey, propValue);
+                }
             }
         }
     }
